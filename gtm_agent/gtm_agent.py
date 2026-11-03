@@ -34,6 +34,11 @@ from . import data_service
 from .data_service import REP_IDS
 
 MODEL_NAME = "gpt-4o-mini"
+SENSITIVE_FIELDS = ("billing_qualification",)
+
+
+def _redact(rec):
+    return {k: v for k, v in rec.items() if k not in SENSITIVE_FIELDS}
 
 # ---------------------------------------------------------------------------
 # Tools
@@ -52,13 +57,13 @@ def build_prospect_profile(prospect_id: str) -> dict:
     "Assemble a full prospect profile (engagement history, account details, tech stack) and store it. Returns the profile and a found flag."
     existing = data_service.get_profile_from_db(prospect_id)["prospect_profile"]
     if existing is not None:
-        return {"prospect_profile": existing, "found": True}
+        return {"prospect_profile": _redact(existing), "found": True}
     rec = data_service.get_prospect_record(prospect_id)
     if rec is None:
         return {"prospect_profile": None, "found": False}
     built = {
         "prospect_id": prospect_id,
-        **rec,
+        **_redact(rec),
         "engagement_history": data_service.fetch_engagement_history(prospect_id),
         "account_details": data_service.fetch_account_details(prospect_id),
         "tech_stack": data_service.fetch_tech_stack(prospect_id),
@@ -111,6 +116,7 @@ def score_prospect(prospect_profile: dict, offering: dict | None = None) -> dict
     pid = prospect_profile.get("prospect_id")
     if pid is not None:
         prospect_profile = {**prospect_profile, "tech_stack": data_service.fetch_tech_stack(pid)}
+    prospect_profile = _redact(prospect_profile)
     user = (
         "Offering:\n" + json.dumps(offering, indent=2) +
         "\n\nProspect profile:\n" + json.dumps(prospect_profile, indent=2)
@@ -128,12 +134,10 @@ def get_prospect(prospect_id: str) -> dict:
     record = data_service.get_prospect_record(prospect_id)
     if record is None:
         return {"prospect": None, "found": False}
-    # Carry the contact fields through, dropping the bulky enrichment blobs the
-    # caller can pull from build_prospect_profile instead.
     contact = {
         "prospect_id": prospect_id,
         **{k: v for k, v in record.items()
-           if k not in ("engagement_history", "account_details", "tech_stack")},
+           if k in ("name", "email", "disqualified")},
     }
     return {"prospect": contact, "found": True}
 
