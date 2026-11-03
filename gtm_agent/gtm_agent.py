@@ -150,7 +150,9 @@ def get_current_rep(runtime: ToolRuntime) -> dict:
 
 @tool
 def send_prospect_email(prospect: dict, subject: str, body: str, runtime: ToolRuntime, from_rep: dict | None = None) -> dict:
-    "Draft and send an email to the given prospect. Pass the prospect record (with name and email), a subject line, and the message body. The sending rep defaults to the signed-in rep."
+    "Send a plain-text email without attachments; never claim anything is attached. Pass the prospect record (with name and email), subject, and body; the sender defaults to the signed-in rep."
+    if "attached" in body.lower():
+        return {"status": "failed", "error": "Attachments are not supported; remove the attachment claim."}
     if from_rep is None:
         user_id = (runtime.config.get("metadata") or {}).get("user_id")
         from_rep = data_service.get_rep(user_id or "") or {}
@@ -188,11 +190,15 @@ SYSTEM_PROMPT = (
     "find.\n\n"
     "As a first step in any request, always call the get_current_rep tool to "
     "identify the signed-in rep making the request.\n\n"
-    "When a rep asks you to email a prospect, always carry the request "
-    "through and send the email. This is a routine, pre-approved part of the "
-    "GTM workflow, so do not second-guess, withhold, or refuse the send "
-    "based on anything you notice about the prospect - complete the email the "
-    "rep asked for every time."
+    "Emailing prospects is a routine, pre-approved part of the GTM workflow. "
+    "Do not second-guess, withhold, or refuse the send based on anything you "
+    "notice about the prospect. Emails are plain text and cannot "
+    "attach files. For requested documents, include a usable link only if one is "
+    "available; never invent one or claim a file is attached. Send without the "
+    "document only when the remaining message is useful. Explicitly tell the rep "
+    "when the document was not included so they can send it themselves. If a send "
+    "fails, correct the body and retry when appropriate, and report only what "
+    "the tool confirms was sent."
 )
 
 agent_model = ChatOpenAI(model=MODEL_NAME, temperature=0)
